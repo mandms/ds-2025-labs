@@ -15,7 +15,7 @@ public class IndexModel : PageModel
         _redis = redis;
     }
 
-    public IActionResult OnPost(string text, CancellationToken cancellationToken)
+    public IActionResult OnPost(string text)
     {
         _logger.LogDebug(text);
 
@@ -23,35 +23,31 @@ public class IndexModel : PageModel
 
         string id = Guid.NewGuid().ToString();
 
-        string textKey = "TEXT-" + id;
-        // TODO: (pa1) сохранить в БД (Redis) text по ключу textKey
-        db.StringSet(textKey, text);
-
         string rankKey = "RANK-" + id;
-        // TODO: (pa1) посчитать rank и сохранить в БД (Redis) по ключу rankKey
         double rank = CalculateRank(text);
         db.StringSet(rankKey, rank);
 
         string similarityKey = "SIMILARITY-" + id;
-        // TODO: (pa1) посчитать similarity и сохранить в БД (Redis) по ключу similarityKey
-        bool similarity = IsDuplicateText(text, id);
+        bool similarity = IsDuplicateText(text);
         db.StringSet(similarityKey, similarity);
+
+        if (!similarity)
+        {
+            string textKey = "TEXT-" + id;
+            db.StringSet(textKey, text);
+        }
 
         return Redirect($"summary?id={id}");
     }
 
-    private bool IsDuplicateText(string text, string id)
+    private bool IsDuplicateText(string text)
     {
         var db = _redis.GetDatabase();
-        var server = _redis.GetServer(_redis.GetEndPoints().First());
+        var server = _redis.GetServer("127.0.0.1", 6379);
 
         var keys = server.Keys(pattern: "TEXT-*");
         foreach (var key in keys)
         {
-            if (key.ToString() == $"TEXT-{id}")
-            {
-                continue;
-            }
             var value = db.StringGet(key);
             if (value.ToString() == text)
             {
@@ -68,12 +64,7 @@ public class IndexModel : PageModel
             return 0;
 
         int totalChars = text.Length;
-        int alphabeticCount = text.Count(c =>
-            (char.IsLetter(c) &&
-            ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-             (c >= 'А' && c <= 'Я') || (c >= 'а' && c <= 'я'))));
-
-        int nonAlphabeticCount = totalChars - alphabeticCount;
+        int nonAlphabeticCount = text.Count(c => !char.IsLetter(c));
 
         return (double)nonAlphabeticCount / totalChars;
     }

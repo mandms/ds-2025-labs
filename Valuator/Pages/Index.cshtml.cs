@@ -8,11 +8,17 @@ public class IndexModel : PageModel
 {
     private readonly ILogger<IndexModel> _logger;
     private readonly IConnectionMultiplexer _redis;
+    public string Port { get; set; }
 
     public IndexModel(ILogger<IndexModel> logger, IConnectionMultiplexer redis)
     {
         _logger = logger;
         _redis = redis;
+    }
+
+    public void OnGet()
+    {
+        Port = Environment.GetEnvironmentVariable("EXTERNAL_PORT") ?? "NO PORT";
     }
 
     public IActionResult OnPost(string text)
@@ -43,7 +49,7 @@ public class IndexModel : PageModel
     private bool IsDuplicateText(string text)
     {
         var db = _redis.GetDatabase();
-        var server = _redis.GetServer("127.0.0.1", 6379);
+        var server = _redis.GetServer("redis", 6379);
 
         var keys = server.Keys(pattern: "TEXT-*");
         foreach (var key in keys)

@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Mvc;
 using StackExchange.Redis;
 
 namespace Valuator;
@@ -11,6 +13,15 @@ public class Program
 
         builder.Services.AddSingleton<IConnectionMultiplexer>(options =>
             ConnectionMultiplexer.Connect(connectionString!));
+        builder.Services.AddMvc(options => options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
+
+        var redis = ConnectionMultiplexer.Connect(connectionString!);
+
+        builder.Services.AddDataProtection()
+            .PersistKeysToStackExchangeRedis(redis, "DataProtection-Keys")
+            .SetApplicationName("Valuator");
+
+        builder.Services.AddCors();
 
         // Add services to the container.
         builder.Services.AddRazorPages();
@@ -22,9 +33,12 @@ public class Program
         {
             app.UseExceptionHandler("/Error");
         }
+
         app.UseStaticFiles();
 
         app.UseRouting();
+
+        app.UseCors(builder => builder.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
 
         app.UseAuthorization();
 

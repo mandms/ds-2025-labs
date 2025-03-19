@@ -8,18 +8,15 @@
 
   <ItemGroup>
     <Compile Remove="Entities\**" />
-    <Compile Remove="Repositories\**" />
     <Content Remove="Entities\**" />
-    <Content Remove="Repositories\**" />
     <EmbeddedResource Remove="Entities\**" />
-    <EmbeddedResource Remove="Repositories\**" />
     <None Remove="Entities\**" />
-    <None Remove="Repositories\**" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" Version="9.0.3" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.2" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.1.2" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.24" />
   </ItemGroup>
 

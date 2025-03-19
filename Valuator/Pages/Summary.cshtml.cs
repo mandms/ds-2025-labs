@@ -1,16 +1,16 @@
 ﻿using Microsoft.AspNetCore.Mvc.RazorPages;
-using StackExchange.Redis;
+using Valuator.Repositories;
 
 namespace Valuator.Pages;
 public class SummaryModel : PageModel
 {
     private readonly ILogger<SummaryModel> _logger;
-    private readonly IConnectionMultiplexer _redis;
+    private readonly IValuatorRepository _repository;
 
-    public SummaryModel(ILogger<SummaryModel> logger, IConnectionMultiplexer redis)
+    public SummaryModel(ILogger<SummaryModel> logger, IValuatorRepository valuatorRepository)
     {
         _logger = logger;
-        _redis = redis;
+        _repository = valuatorRepository;
     }
 
     public double Rank { get; set; }
@@ -21,9 +21,8 @@ public class SummaryModel : PageModel
         _logger.LogDebug(id);
 
         // TODO: (pa1) проинициализировать свойства Rank и Similarity значениями из БД (Redis)
-        var db = _redis.GetDatabase();
-        var rank = (double)db.StringGet($"RANK-{id}");
-        var similarity = (int)db.StringGet($"SIMILARITY-{id}");
+        var rank = (double)_repository.GetValue($"RANK-{id}");
+        var similarity = (int)_repository.GetValue($"SIMILARITY-{id}");
 
         Rank = rank;
         Similarity = similarity;

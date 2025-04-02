@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using StackExchange.Redis;
@@ -10,28 +9,45 @@ namespace RankCalculator
     {
         private readonly ILogger<Worker> _logger;
         private readonly IConnectionMultiplexer _redis;
-        private const string QueueName = "valuator";
+		private readonly IConnection _connection;
+		private const string QueueName = "calculate";
 
-        public Worker(ILogger<Worker> logger, IConnectionMultiplexer redis)
+        public Worker(IConfiguration configuration, ILogger<Worker> logger, IConnectionMultiplexer redis)
         {
             _logger = logger;
             _redis = redis;
-        }
+
+			var factory = new ConnectionFactory
+			{
+				HostName = configuration["RabbitMQ:Host"] ?? "localhost",
+				UserName = configuration["RabbitMQ:Username"] ?? "guest",
+				Password = configuration["RabbitMQ:Password"] ?? "guest",
+				Port = configuration.GetValue("RabbitMQ:Port", 5672),
+			};
+
+			try
+			{
+				_connection = factory.CreateConnectionAsync().GetAwaiter().GetResult();
+				_logger.LogInformation("Подключение к RabbitMQ установлено");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка подключения к RabbitMQ");
+				throw;
+			}
+		}
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Worker started at: {time}", DateTimeOffset.Now);
 
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
-                try
-                {
-                    await RunConsumerAsync(stoppingToken);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error occurred while processing messages");
-                }
+                await RunConsumerAsync(stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while processing messages");
             }
 
             _logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
@@ -39,29 +55,25 @@ namespace RankCalculator
 
         private async Task RunConsumerAsync(CancellationToken stoppingToken)
         {
-            var factory = new ConnectionFactory
-            {
-                HostName = "localhost",
-                UserName = "admin",
-                Password = "123",
-                Port = 5672,
-            };
 
-            await using var connection = await factory.CreateConnectionAsync();
-            await using var channel = await connection.CreateChannelAsync();
+            try {            
+                IChannel channel = await _connection.CreateChannelAsync();
 
-            await DeclareTopologyAsync(channel);
+                await DeclareTopologyAsync(channel);
+			    var consumer = new AsyncEventingBasicConsumer(channel);
+                consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeMessageAsync(eventArgs, channel);
 
-            var consumer = new AsyncEventingBasicConsumer(channel);
-            consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeMessageAsync(channel, eventArgs);
-
-            await channel.BasicConsumeAsync(
-                queue: QueueName,
-                autoAck: false,
-                consumer: consumer
-            );
-
-            _logger.LogInformation("Consumer started and waiting for messages...");
+                await channel.BasicConsumeAsync(
+                    queue: QueueName,
+                    autoAck: false,
+                    consumer: consumer
+                );
+			}
+			catch (Exception e)
+			{
+				_logger.LogError(e.Message);
+			};
+			_logger.LogInformation("Consumer started and waiting for messages...");
 
             // Keep the consumer running until cancellation is requested
             while (!stoppingToken.IsCancellationRequested)
@@ -70,31 +82,28 @@ namespace RankCalculator
             }
         }
 
-        private async Task ConsumeMessageAsync(IChannel channel, BasicDeliverEventArgs eventArgs)
+        private async Task ConsumeMessageAsync(BasicDeliverEventArgs eventArgs, IChannel channel)
         {
-            try
-            {
-                _logger.LogInformation("Consuming message...");
+            _logger.LogInformation("Consuming message...");
 
-                var messageJSON = Encoding.UTF8.GetString(eventArgs.Body.ToArray());
+            string key = Encoding.UTF8.GetString(eventArgs.Body.ToArray()).Trim('\"');
+            var db = _redis.GetDatabase();
 
-                var message = JsonConvert.DeserializeAnonymousType(messageJSON, new { key = "", text = "" });
+            string textKey = "TEXT-" + key;
 
-                if (message == null) return;
+            string text = Convert.ToString(db.StringGet(textKey));
 
-                double rank = CalculateRank(message.text);
+            var rank = CalculateRank(text!);
 
-                var db = _redis.GetDatabase();
-                await db.StringSetAsync($"RANK-{message.key}", rank);
+            string rankKey = "RANK-" + key;
 
-                await channel.BasicAckAsync(eventArgs.DeliveryTag, false);
+            await db.StringSetAsync(rankKey, rank);
 
-                _logger.LogInformation("Message processed. Rank: {rank}", rank);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing message");
-            }
+            await channel.BasicAckAsync(eventArgs.DeliveryTag, false);
+
+            _logger.LogInformation("key: {key} text: {text}", key, text);
+
+            _logger.LogInformation("Message processed. Rank: {rank}", rank);
         }
 
         private async Task DeclareTopologyAsync(IChannel channel)

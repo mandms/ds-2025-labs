@@ -15,16 +15,19 @@ public class SummaryModel : PageModel
 
     public double Rank { get; set; }
     public double Similarity { get; set; }
+    public bool Loading { get; set; } = false;
 
     public void OnGet(string id)
     {
         _logger.LogDebug(id);
-
-        // TODO: (pa1) проинициализировать свойства Rank и Similarity значениями из БД (Redis)
-        var rank = (double)_repository.GetValue($"RANK-{id}");
+		var rank = _repository.GetValue($"RANK-{id}");
         var similarity = (int)_repository.GetValue($"SIMILARITY-{id}");
-
-        Rank = rank;
         Similarity = similarity;
+        if (rank != StackExchange.Redis.RedisValue.Null)
+        {
+            Rank = Convert.ToDouble(rank);
+            return;
+        }
+        Loading = true;
     }
 }

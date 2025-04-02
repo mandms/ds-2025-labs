@@ -35,6 +35,38 @@ services:
     ports:
       - "5002:5002"
 
+  rank_calculator1:
+    build:
+      context: ../RankCalculator
+      dockerfile: Dockerfile
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+      - ConnectionStrings__Redis=redis:6379
+      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app1:
+        condition: service_started
+    networks:
+      - app-network
+
+  rank_calculator2:
+    build:
+      context: ../RankCalculator
+      dockerfile: Dockerfile
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+      - ConnectionStrings__Redis=redis:6379
+      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
+    depends_on:
+      rank_calculator1:
+        condition: service_started
+    networks:
+      - app-network
+
   # Redis
   redis:
     image: redis:latest
@@ -43,18 +75,29 @@ services:
       - "6379:6379"
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
+    hostname: rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=123
     ports:
-      - "5672:5672"  # Порт для AMQP
-      - "15672:15672"  # Порт для управления RabbitMQ (Web UI)
+      - "5672:5672"  # AMQP
+      - "15672:15672"  # Web UI
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Nginx
   nginx:

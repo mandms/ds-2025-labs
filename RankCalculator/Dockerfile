@@ -7,10 +7,10 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["RankCalculator/RankCalculator.csproj", "RankCalculator/"]
-RUN dotnet restore "./RankCalculator/RankCalculator.csproj"
+COPY ["RankCalculator.csproj", "./"]
+RUN dotnet restore "./RankCalculator.csproj"
 COPY . .
-WORKDIR "/src/RankCalculator"
+WORKDIR "/src/."
 RUN dotnet build "./RankCalculator.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish

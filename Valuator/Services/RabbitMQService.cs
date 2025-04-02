@@ -6,62 +6,80 @@ namespace Valuator.Services
 {
     public class RabbitMQService : IRabbitMQService
     {
+        private readonly IConnection _connection;
+        private readonly IChannel _channel;
+        private readonly ILogger<RabbitMQService> _logger;
+
+        public RabbitMQService(IConfiguration configuration, ILogger<RabbitMQService> logger)
+        {
+            _logger = logger;
+
+            var factory = new ConnectionFactory
+            {
+                HostName = configuration["RabbitMQ:Host"] ?? "localhost",
+                UserName = configuration["RabbitMQ:Username"] ?? "guest",
+                Password = configuration["RabbitMQ:Password"] ?? "guest",
+                Port = configuration.GetValue("RabbitMQ:Port", 5672),
+            };
+
+            try
+            {
+                _connection = factory.CreateConnectionAsync().GetAwaiter().GetResult();
+                _channel = _connection.CreateChannelAsync().GetAwaiter().GetResult();
+                _logger.LogInformation("Подключение к RabbitMQ установлено");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка подключения к RabbitMQ");
+                throw;
+            }
+        }
+
         public void SendMessage(object obj, CancellationTokenSource cts)
         {
             var message = JsonSerializer.Serialize(obj);
             Task.Factory.StartNew(() => ProduceAsync(cts.Token, message), cts.Token);
         }
 
-        private static async Task ProduceAsync(CancellationToken ct, string message)
+        private async Task ProduceAsync(CancellationToken ct, string textId)
         {
-            // Установка соединения с RabbitMQ по адресу localhost:5672
-            ConnectionFactory factory = new ConnectionFactory
-            {
-                HostName = "rabbitmq",
-                UserName = "admin",
-                Password = "123",
-                Port = 5672,
-            };
+            await DeclareTopologyAsync(_channel, ct);
 
-            await using IConnection connection = await factory.CreateConnectionAsync(ct);
-            await using IChannel channel = await connection.CreateChannelAsync(null, ct);
 
-            await DeclareTopologyAsync(channel, ct);
+                byte[] messageData = Encoding.UTF8.GetBytes(textId);
 
-            byte[] messageData = Encoding.UTF8.GetBytes(message);
-
-            await channel.BasicPublishAsync(
+                await _channel.BasicPublishAsync(
                 exchange: "calculate",
                 routingKey: "rank",
                 mandatory: false,
                 body: messageData,
                 cancellationToken: ct
-            );
+                );
 
-            await connection.CloseAsync(ct);
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
 
         /// <summary>
         ///  Определяет топологию: producer -> exchange -> queue -> consumer.
         ///  В нашем случае соответствие 1:1 между exchange и queue, а routing key не используется.
         /// </summary>
-        private static async Task DeclareTopologyAsync(IChannel channel, CancellationToken ct)
+        private async Task DeclareTopologyAsync(IChannel channel, CancellationToken ct)
         {
             await channel.ExchangeDeclareAsync(
-                exchange: "calculate",
+                exchange: "valuator",
                 type: ExchangeType.Direct,
                 cancellationToken: ct
             );
             await channel.QueueDeclareAsync(
-                queue: "valuator",
+                queue: "calculate",
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
                 cancellationToken: ct
             );
             await channel.QueueBindAsync(
-                queue: "valuator",
-                exchange: "calculate",
+                queue: "calculate",
+                exchange: "valuator",
                 routingKey: "rank",
                 cancellationToken: ct);
         }

@@ -22,7 +22,7 @@ public class Program
 
         builder.Services.AddScoped<IValuatorRepository, ValuatorRepository>();
 
-        builder.Services.AddScoped<IRabbitMQService, RabbitMQService>();
+        builder.Services.AddSingleton<IRabbitMQService, RabbitMQService>();
 
         builder.Services.AddDataProtection()
             .PersistKeysToStackExchangeRedis(redis, "DataProtection-Keys")

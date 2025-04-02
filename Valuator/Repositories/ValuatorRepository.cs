@@ -33,12 +33,6 @@ namespace Valuator.Repositories
             return false;
         }
 
-        public void SetRank(string key, double value)
-        {
-            var db = _redis.GetDatabase();
-            db.StringSet(key, value);
-        }
-
         public void SetSimilarity(string key, bool value)
         {
             var db = _redis.GetDatabase();

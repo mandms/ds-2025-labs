@@ -2,6 +2,7 @@
 {
     public interface IRabbitMQService
     {
-        void SendMessage(object obj, CancellationTokenSource cts);
-    }
+        void SendTextMessage(string textId, CancellationTokenSource cts);
+		void SendSimilarityMessage(bool similarity, string id, CancellationTokenSource cts);
+	}
 }

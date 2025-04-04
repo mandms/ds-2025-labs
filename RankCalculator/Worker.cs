@@ -2,6 +2,7 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using StackExchange.Redis;
 using System.Text;
+using System.Text.Json;
 
 namespace RankCalculator
 {
@@ -55,12 +56,12 @@ namespace RankCalculator
 
         private async Task RunConsumerAsync(CancellationToken stoppingToken)
         {
-
-            try {            
+            try
+            {
                 IChannel channel = await _connection.CreateChannelAsync();
 
                 await DeclareTopologyAsync(channel);
-			    var consumer = new AsyncEventingBasicConsumer(channel);
+                var consumer = new AsyncEventingBasicConsumer(channel);
                 consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeMessageAsync(eventArgs, channel);
 
                 await channel.BasicConsumeAsync(
@@ -68,12 +69,12 @@ namespace RankCalculator
                     autoAck: false,
                     consumer: consumer
                 );
-			}
-			catch (Exception e)
-			{
-				_logger.LogError(e.Message);
-			};
-			_logger.LogInformation("Consumer started and waiting for messages...");
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e.Message);
+            };
+            _logger.LogInformation("Consumer started and waiting for messages...");
 
             // Keep the consumer running until cancellation is requested
             while (!stoppingToken.IsCancellationRequested)
@@ -99,7 +100,15 @@ namespace RankCalculator
 
             await db.StringSetAsync(rankKey, rank);
 
-            await channel.BasicAckAsync(eventArgs.DeliveryTag, false);
+            var rankEventProps = new RankEventProps
+            {
+                Id = key,
+                Rank = rank
+            };
+
+            await ProduceAsync(channel, rankEventProps, new CancellationToken()); //возможно ошибка из-за токена
+
+			await channel.BasicAckAsync(eventArgs.DeliveryTag, false);
 
             _logger.LogInformation("key: {key} text: {text}", key, text);
 
@@ -128,5 +137,42 @@ namespace RankCalculator
 
             return (double)nonAlphabeticCount / totalChars;
         }
-    }
+
+		private async Task DeclareProduceTopologyAsync(IChannel channel, CancellationToken ct)
+		{
+			await channel.QueueDeclareAsync(
+				queue: "rank_calculated",
+				durable: true,
+				exclusive: false,
+				autoDelete: false,
+				cancellationToken: ct
+			);
+			await channel.QueueBindAsync(
+				queue: "rank_calculated",
+				exchange: "events",
+				routingKey: "valuator.rank_calculator.rank.calculated",
+				cancellationToken: ct);
+		}
+
+		private async Task ProduceAsync(IChannel channel, RankEventProps rankEventProps, CancellationToken ct)
+        {
+			await DeclareProduceTopologyAsync(channel, ct);
+
+			byte[] messageData = JsonSerializer.SerializeToUtf8Bytes(rankEventProps);
+
+			await channel.BasicPublishAsync(
+				exchange: "events",
+				routingKey: "valuator.rank_calculator.rank.calculated",
+				mandatory: false,
+				body: messageData,
+				cancellationToken: ct
+			);
+		}
+
+        struct RankEventProps
+        {
+            public double Rank { get; set; }
+            public string Id { get; set; }
+        }
+	}
 }

@@ -1,5 +1,4 @@
 ﻿using RabbitMQ.Client;
-using System.Text;
 using System.Text.Json;
 
 namespace Valuator.Services
@@ -35,53 +34,92 @@ namespace Valuator.Services
             }
         }
 
-        public void SendMessage(object obj, CancellationTokenSource cts)
-        {
-            var message = JsonSerializer.Serialize(obj);
-            Task.Factory.StartNew(() => ProduceAsync(cts.Token, message), cts.Token);
+        public void SendTextMessage(string textId, CancellationTokenSource cts)
+		{
+            var queueParams = new QueueParams 
+            {
+                Queue = "calculate",
+                RoutingKey = "rank",
+				Exchange = "valuator",
+                ExchangeType = ExchangeType.Direct
+			};
+
+			Task.Factory.StartNew(() => ProduceAsync(cts.Token, queueParams, textId), cts.Token);
         }
 
-        private async Task ProduceAsync(CancellationToken ct, string textId)
+        public void SendSimilarityMessage(bool similarity, string id, CancellationTokenSource cts)
         {
-            await DeclareTopologyAsync(_channel, ct);
+			var queueParams = new QueueParams
+			{
+				Queue = "similarity_calculated", //перенести в потребителя создание и тд очреди
+				RoutingKey = "valuator.valuator.similarity.calculated",
+				Exchange = "events",
+                ExchangeType = ExchangeType.Topic
+			};
 
+            var similarityEventParams = new SimilarityEventParams
+            {
+                Similarity = similarity,
+                Id = id
+            };
 
-                byte[] messageData = Encoding.UTF8.GetBytes(textId);
+			Task.Factory.StartNew(() => ProduceAsync(cts.Token, queueParams, similarityEventParams), cts.Token);
+		}
 
-                await _channel.BasicPublishAsync(
-                exchange: "calculate",
-                routingKey: "rank",
+        private async Task ProduceAsync(CancellationToken ct, QueueParams queueParams, object obj)
+        {
+            await DeclareTopologyAsync(_channel, queueParams, ct);
+
+            byte[] messageData = JsonSerializer.SerializeToUtf8Bytes(obj);
+
+            await _channel.BasicPublishAsync(
+                exchange: queueParams.Exchange,
+                routingKey: queueParams.RoutingKey,
                 mandatory: false,
                 body: messageData,
                 cancellationToken: ct
-                );
+            );
 
-                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
 
         /// <summary>
         ///  Определяет топологию: producer -> exchange -> queue -> consumer.
         ///  В нашем случае соответствие 1:1 между exchange и queue, а routing key не используется.
         /// </summary>
-        private async Task DeclareTopologyAsync(IChannel channel, CancellationToken ct)
+        private async Task DeclareTopologyAsync(IChannel channel, QueueParams queueParams, CancellationToken ct)
         {
             await channel.ExchangeDeclareAsync(
-                exchange: "valuator",
-                type: ExchangeType.Direct,
+                exchange: queueParams.Exchange,
+                type: queueParams.ExchangeType,
                 cancellationToken: ct
             );
             await channel.QueueDeclareAsync(
-                queue: "calculate",
+                queue: queueParams.Queue,
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
                 cancellationToken: ct
             );
             await channel.QueueBindAsync(
-                queue: "calculate",
-                exchange: "valuator",
-                routingKey: "rank",
+                queue: queueParams.Queue,
+                exchange: queueParams.Exchange,
+                routingKey: queueParams.RoutingKey,
                 cancellationToken: ct);
+        }
+
+        struct QueueParams
+        {
+            public string Queue {  get; set; }
+            public string Exchange {  get; set; }
+            public string RoutingKey { get; set; }
+            public string ExchangeType { get; set; }
+		}
+
+        struct SimilarityEventParams
+        {
+            public bool Similarity { get; set; }
+            public string Id { get; set; }
         }
     }
 }

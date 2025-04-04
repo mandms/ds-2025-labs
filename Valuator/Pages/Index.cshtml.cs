@@ -33,13 +33,16 @@ public class IndexModel : PageModel
 
         string similarityKey = "SIMILARITY-" + id;
         bool similarity = _repository.IsDuplicateText(text);
-        _repository.SetSimilarity(similarityKey, similarity);
+
+        _service.SendSimilarityMessage(similarity, id, cts);
+
+		_repository.SetSimilarity(similarityKey, similarity);
 
         string textKey = "TEXT-" + id;
         _repository.SetText(textKey, text);
 
-        _service.SendMessage(id, cts);
-
+        _service.SendTextMessage(id, cts);
+        
         return Redirect($"summary?id={id}");
     }
 }

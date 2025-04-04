@@ -67,6 +67,32 @@ services:
     networks:
       - app-network
 
+  events_logger1:
+    build:
+      context: ../EventsLogger
+      dockerfile: Dockerfile
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
+    depends_on:
+      rank_calculator2:
+        condition: service_started
+    networks:
+      - app-network
+
+  events_logger2:
+    build:
+      context: ../EventsLogger
+      dockerfile: Dockerfile
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
+    depends_on:
+      events_logger1:
+        condition: service_started
+    networks:
+      - app-network
+
   # Redis
   redis:
     image: redis:latest

@@ -8,6 +8,13 @@ namespace EventsLogger
 	{
 		private readonly ILogger<EventsConsumer> _logger;
 		private readonly IConnection _connection;
+		private readonly QueueParams _queueParams = new()
+		{
+			Queue = "events_bus",
+			RoutingKey = "valuator.events_logger.#", //откуда или куда? valuator.valuator.similarity.calculated
+			Exchange = "events",
+			ExchangeType = ExchangeType.Topic,
+		};
 
 		public EventsConsumer(IConfiguration configuration, ILogger<EventsConsumer> logger)
 		{
@@ -39,10 +46,7 @@ namespace EventsLogger
 
 			try
 			{
-				var rankTask = RunRankConsumerAsync(stoppingToken);
-				var similarityTask = RunSimilarityConsumerAsync(stoppingToken);
-
-				await Task.WhenAll(rankTask, similarityTask);
+				await RunConsumerAsync(stoppingToken);
 			}
 			catch (Exception ex)
 			{
@@ -52,18 +56,18 @@ namespace EventsLogger
 			_logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
 		}
 
-		private async Task RunRankConsumerAsync(CancellationToken stoppingToken)
+		private async Task RunConsumerAsync(CancellationToken stoppingToken)
 		{
 			try
 			{
 				IChannel channel = await _connection.CreateChannelAsync();
 
-				await DeclareTopologyAsync(channel, "similarity_calculated");
+				await DeclareTopologyAsync(channel, stoppingToken);
 				var consumer = new AsyncEventingBasicConsumer(channel);
-				consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeSimilarityMessageAsync(eventArgs, channel);
+				consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeMessageAsync(eventArgs, channel);
 
 				await channel.BasicConsumeAsync(
-					queue: "similarity_calculated",
+					queue: _queueParams.Queue,
 					autoAck: false,
 					consumer: consumer
 				);
@@ -80,44 +84,16 @@ namespace EventsLogger
 			}
 		}
 
-		private async Task RunSimilarityConsumerAsync(CancellationToken stoppingToken)
-		{
-			try
-			{
-				IChannel channel = await _connection.CreateChannelAsync();
-
-				await DeclareTopologyAsync(channel, "rank_calculated");
-				var consumer = new AsyncEventingBasicConsumer(channel);
-				consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeRankMessageAsync(eventArgs, channel);
-
-				await channel.BasicConsumeAsync(
-					queue: "rank_calculated",
-					autoAck: false,
-					consumer: consumer
-				);
-			}
-			catch (Exception e)
-			{
-				_logger.LogError(e.Message);
-			};
-
-			// Keep the consumer running until cancellation is requested
-			while (!stoppingToken.IsCancellationRequested)
-			{
-				await Task.Delay(1000, stoppingToken);
-			}
-		}
-
-		private async Task ConsumeRankMessageAsync(BasicDeliverEventArgs eventArgs, IChannel channel)
+		private async Task ConsumeRankAsync(BasicDeliverEventArgs eventArgs, IChannel channel)
 		{
 			RankEventProps rankEventProps = await JsonSerializer.DeserializeAsync<RankEventProps>(new MemoryStream(eventArgs.Body.ToArray()));
-
+			
 			_logger.LogInformation("Event type: RankCalculated \n " +
 				"EntityId: {id} \n " +
 				"Rank: {rank}", rankEventProps.Id, rankEventProps.Rank);
 		}
 
-		private async Task ConsumeSimilarityMessageAsync(BasicDeliverEventArgs eventArgs, IChannel channel)
+		private async Task ConsumeSimilarityAsync(BasicDeliverEventArgs eventArgs, IChannel channel)
 		{
 			SimilarityEventParams similarityEventProps = await JsonSerializer.DeserializeAsync<SimilarityEventParams>(new MemoryStream(eventArgs.Body.ToArray()));
 
@@ -126,14 +102,38 @@ namespace EventsLogger
 				"Similarity: {similarity}", similarityEventProps.Id, similarityEventProps.Similarity);
 		}
 
-		private async Task DeclareTopologyAsync(IChannel channel, string queueName)
+		private async Task ConsumeMessageAsync(BasicDeliverEventArgs eventArgs, IChannel channel)
 		{
+			if (eventArgs.RoutingKey.EndsWith("similarity.calculated"))
+			{
+				await ConsumeSimilarityAsync(eventArgs, channel);
+			}
+
+			if (eventArgs.RoutingKey.EndsWith("rank.calculated"))
+			{
+				await ConsumeRankAsync(eventArgs, channel);
+			}
+		}
+
+		private async Task DeclareTopologyAsync(IChannel channel, CancellationToken ct)
+		{
+			await channel.ExchangeDeclareAsync(
+				exchange: _queueParams.Exchange,
+				type: _queueParams.ExchangeType,
+				cancellationToken: ct
+			);
 			await channel.QueueDeclareAsync(
-				queue: queueName,
+				queue: _queueParams.Queue,
 				durable: true,
 				exclusive: false,
-				autoDelete: false
+				autoDelete: false,
+				cancellationToken: ct
 			);
+			await channel.QueueBindAsync(
+				queue: _queueParams.Queue,
+				exchange: _queueParams.Exchange,
+				routingKey: _queueParams.RoutingKey,
+				cancellationToken: ct);
 		}
 
 		struct RankEventProps
@@ -146,6 +146,14 @@ namespace EventsLogger
 		{
 			public bool Similarity { get; set; }
 			public string Id { get; set; }
+		}
+
+		struct QueueParams
+		{
+			public string Queue { get; set; }
+			public string Exchange { get; set; }
+			public string RoutingKey { get; set; }
+			public string ExchangeType { get; set; }
 		}
 	}
 }

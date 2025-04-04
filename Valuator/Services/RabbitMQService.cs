@@ -36,25 +36,21 @@ namespace Valuator.Services
 
         public void SendTextMessage(string textId, CancellationTokenSource cts)
 		{
-            var queueParams = new QueueParams 
+            var publishParams = new PublishParams 
             {
-                Queue = "calculate",
                 RoutingKey = "rank",
-				Exchange = "valuator",
-                ExchangeType = ExchangeType.Direct
+				Exchange = "valuator"
 			};
 
-			Task.Factory.StartNew(() => ProduceAsync(cts.Token, queueParams, textId), cts.Token);
+			Task.Factory.StartNew(() => ProduceAsync(cts.Token, publishParams, textId), cts.Token);
         }
 
         public void SendSimilarityMessage(bool similarity, string id, CancellationTokenSource cts)
         {
-			var queueParams = new QueueParams
+			var publishParams = new PublishParams
 			{
-				Queue = "similarity_calculated", //перенести в потребителя создание и тд очреди
-				RoutingKey = "valuator.valuator.similarity.calculated",
-				Exchange = "events",
-                ExchangeType = ExchangeType.Topic
+				RoutingKey = "valuator.events_logger.similarity.calculated",
+				Exchange = "events"
 			};
 
             var similarityEventParams = new SimilarityEventParams
@@ -63,18 +59,16 @@ namespace Valuator.Services
                 Id = id
             };
 
-			Task.Factory.StartNew(() => ProduceAsync(cts.Token, queueParams, similarityEventParams), cts.Token);
+			Task.Factory.StartNew(() => ProduceAsync(cts.Token, publishParams, similarityEventParams), cts.Token);
 		}
 
-        private async Task ProduceAsync(CancellationToken ct, QueueParams queueParams, object obj)
+        private async Task ProduceAsync(CancellationToken ct, PublishParams publishParams, object obj)
         {
-            await DeclareTopologyAsync(_channel, queueParams, ct);
-
             byte[] messageData = JsonSerializer.SerializeToUtf8Bytes(obj);
 
             await _channel.BasicPublishAsync(
-                exchange: queueParams.Exchange,
-                routingKey: queueParams.RoutingKey,
+                exchange: publishParams.Exchange,
+                routingKey: publishParams.RoutingKey,
                 mandatory: false,
                 body: messageData,
                 cancellationToken: ct
@@ -83,37 +77,10 @@ namespace Valuator.Services
             await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
 
-        /// <summary>
-        ///  Определяет топологию: producer -> exchange -> queue -> consumer.
-        ///  В нашем случае соответствие 1:1 между exchange и queue, а routing key не используется.
-        /// </summary>
-        private async Task DeclareTopologyAsync(IChannel channel, QueueParams queueParams, CancellationToken ct)
+        struct PublishParams
         {
-            await channel.ExchangeDeclareAsync(
-                exchange: queueParams.Exchange,
-                type: queueParams.ExchangeType,
-                cancellationToken: ct
-            );
-            await channel.QueueDeclareAsync(
-                queue: queueParams.Queue,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                cancellationToken: ct
-            );
-            await channel.QueueBindAsync(
-                queue: queueParams.Queue,
-                exchange: queueParams.Exchange,
-                routingKey: queueParams.RoutingKey,
-                cancellationToken: ct);
-        }
-
-        struct QueueParams
-        {
-            public string Queue {  get; set; }
             public string Exchange {  get; set; }
             public string RoutingKey { get; set; }
-            public string ExchangeType { get; set; }
 		}
 
         struct SimilarityEventParams

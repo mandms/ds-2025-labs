@@ -11,9 +11,15 @@ namespace RankCalculator
         private readonly ILogger<Worker> _logger;
         private readonly IConnectionMultiplexer _redis;
 		private readonly IConnection _connection;
-		private const string QueueName = "calculate";
+        private QueueParams queueParams = new()
+        {
+            Queue = "calculate",
+            Exchange = "valuator",
+            ExchangeType = ExchangeType.Direct,
+            RoutingKey = "rank"
+        };
 
-        public Worker(IConfiguration configuration, ILogger<Worker> logger, IConnectionMultiplexer redis)
+		public Worker(IConfiguration configuration, ILogger<Worker> logger, IConnectionMultiplexer redis)
         {
             _logger = logger;
             _redis = redis;
@@ -56,25 +62,19 @@ namespace RankCalculator
 
         private async Task RunConsumerAsync(CancellationToken stoppingToken)
         {
-            try
-            {
-                IChannel channel = await _connection.CreateChannelAsync();
+			IChannel channel = await _connection.CreateChannelAsync();
 
-                await DeclareTopologyAsync(channel);
-                var consumer = new AsyncEventingBasicConsumer(channel);
-                consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeMessageAsync(eventArgs, channel);
+			await DeclareTopologyAsync(channel, stoppingToken);
+			var consumer = new AsyncEventingBasicConsumer(channel);
+			consumer.ReceivedAsync += async (_, eventArgs) => await ConsumeMessageAsync(eventArgs, channel);
 
-                await channel.BasicConsumeAsync(
-                    queue: QueueName,
-                    autoAck: false,
-                    consumer: consumer
-                );
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e.Message);
-            };
-            _logger.LogInformation("Consumer started and waiting for messages...");
+			await channel.BasicConsumeAsync(
+				queue: queueParams.Queue,
+				autoAck: false,
+				consumer: consumer
+			);
+
+			_logger.LogInformation("Consumer started and waiting for messages...");
 
             // Keep the consumer running until cancellation is requested
             while (!stoppingToken.IsCancellationRequested)
@@ -115,18 +115,6 @@ namespace RankCalculator
             _logger.LogInformation("Message processed. Rank: {rank}", rank);
         }
 
-        private async Task DeclareTopologyAsync(IChannel channel)
-        {
-            await channel.QueueDeclareAsync(
-                queue: QueueName,
-                durable: true,
-                exclusive: false,
-                autoDelete: false
-            );
-
-            _logger.LogInformation("Topology declared for queue: {queue}", QueueName);
-        }
-
         private static double CalculateRank(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -138,31 +126,34 @@ namespace RankCalculator
             return (double)nonAlphabeticCount / totalChars;
         }
 
-		private async Task DeclareProduceTopologyAsync(IChannel channel, CancellationToken ct)
+		private async Task DeclareTopologyAsync(IChannel channel, CancellationToken ct)
 		{
+			await channel.ExchangeDeclareAsync(
+				exchange: queueParams.Exchange,
+				type: queueParams.ExchangeType,
+				cancellationToken: ct
+			);
 			await channel.QueueDeclareAsync(
-				queue: "rank_calculated",
+				queue: queueParams.Queue,
 				durable: true,
 				exclusive: false,
 				autoDelete: false,
 				cancellationToken: ct
 			);
 			await channel.QueueBindAsync(
-				queue: "rank_calculated",
-				exchange: "events",
-				routingKey: "valuator.rank_calculator.rank.calculated",
+				queue: queueParams.Queue,
+				exchange: queueParams.Exchange,
+				routingKey: queueParams.RoutingKey,
 				cancellationToken: ct);
 		}
 
 		private async Task ProduceAsync(IChannel channel, RankEventProps rankEventProps, CancellationToken ct)
         {
-			await DeclareProduceTopologyAsync(channel, ct);
-
 			byte[] messageData = JsonSerializer.SerializeToUtf8Bytes(rankEventProps);
 
 			await channel.BasicPublishAsync(
 				exchange: "events",
-				routingKey: "valuator.rank_calculator.rank.calculated",
+				routingKey: "valuator.events_logger.rank.calculated",
 				mandatory: false,
 				body: messageData,
 				cancellationToken: ct
@@ -174,5 +165,13 @@ namespace RankCalculator
             public double Rank { get; set; }
             public string Id { get; set; }
         }
+
+		struct QueueParams
+		{
+			public string Queue { get; set; }
+			public string Exchange { get; set; }
+			public string RoutingKey { get; set; }
+			public string ExchangeType { get; set; }
+		}
 	}
 }

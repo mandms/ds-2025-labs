@@ -1,23 +1,27 @@
-#See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
-
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
-USER app
-WORKDIR /app
-
+# Используем официальный образ .NET для сборки
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["RankCalculator.csproj", "./"]
-RUN dotnet restore "./RankCalculator.csproj"
+
+# Копируем файлы проекта и восстанавливаем зависимости
+COPY *.csproj .
+RUN dotnet restore
+
+# Копируем всё остальное и собираем приложение
 COPY . .
-WORKDIR "/src/."
-RUN dotnet build "./RankCalculator.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet publish -c Release -o /app
 
-FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./RankCalculator.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
-
-FROM base AS final
+# Используем официальный образ .NET для запуска
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
-COPY --from=publish /app/publish .
+
+# Копируем собранное приложение
+COPY --from=build /app .
+
+# Указываем порты, которые будет использовать приложение
+EXPOSE 5001 5002
+
+# Устанавливаем переменную среды для указания URL
+ENV ASPNETCORE_URLS=http://0.0.0.0:5003;http://0.0.0.0:5004
+
+# Запускаем приложение
 ENTRYPOINT ["dotnet", "RankCalculator.dll"]

@@ -40,9 +40,10 @@ services:
       context: ../RankCalculator
       dockerfile: Dockerfile
     environment:
-      - DOTNET_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__Redis=redis:6379
       - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
+      - ASPNETCORE_URLS=http://0.0.0.0:5003
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -52,20 +53,25 @@ services:
         condition: service_started
     networks:
       - app-network
+    ports:
+      - "5003:5003"
 
   rank_calculator2:
     build:
       context: ../RankCalculator
       dockerfile: Dockerfile
     environment:
-      - DOTNET_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__Redis=redis:6379
       - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
+      - ASPNETCORE_URLS=http://0.0.0.0:5004
     depends_on:
       rank_calculator1:
         condition: service_started
     networks:
       - app-network
+    ports:
+      - "5004:5004"
 
   events_logger1:
     build:
@@ -131,11 +137,14 @@ services:
     container_name: nginx
     ports:
       - "8080:8080"
+      - "80:80"
     volumes:
       - ./nginx/conf/nginx.conf:/etc/nginx/nginx.conf
     depends_on:
       - app1
       - app2
+      - rank_calculator1
+      - rank_calculator2
     networks:
       - app-network
 

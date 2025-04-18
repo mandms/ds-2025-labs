@@ -2,12 +2,32 @@
 @model Valuator.Pages.SummaryModel
 @{
 }
-@if(Model.Loading == true)
-{
-	<p>Оценка содержания не завершена</p>
-}
-else
-{
-	<p>Оценка содержания: @Model.Rank</p>
-}
+
+<p id="rank">Оценка содержания не завершена</p>
 <p>Плагиат: @Model.Similarity</p>
+<script src="~/lib/signalr/signalr.js"></script>
+<script>
+    document.cookie = `textId=${encodeURIComponent('@(Model.TextId)')}; path=/`;
+    const hubConnection = new signalR.HubConnectionBuilder()
+        .configureLogging(signalR.LogLevel.Debug)  // add this for diagnostic clues
+        .withUrl(`http://localhost:80/rankHub`, {
+            skipNegotiation: true,  // skipNegotiation as we specify WebSockets
+            transport: signalR.HttpTransportType.WebSockets, // force WebSocket transport
+            query: { 'id': '@(Model.TextId)' }
+        })
+        .build();
+
+    hubConnection.on("RankReceived", function (rank) {  
+        let messageElement = document.getElementById("rank");
+        messageElement.textContent = `Оценка содержания: ${rank}`;
+    });
+
+    hubConnection.start()
+        .then(function () {
+            console.log('@(Model.TextId)');
+            document.getElementById("rank").textContent = "Оценка содержания не завершена";
+        })
+        .catch(function (err) {
+            return console.error(err.toString());
+        });
+</script>

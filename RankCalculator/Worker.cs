@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using StackExchange.Redis;
@@ -11,7 +12,8 @@ namespace RankCalculator
         private readonly ILogger<Worker> _logger;
         private readonly IConnectionMultiplexer _redis;
 		private readonly IConnection _connection;
-        private QueueParams queueParams = new()
+		private readonly IHubContext<RankHub> _hubContext;
+		private QueueParams queueParams = new()
         {
             Queue = "calculate",
             Exchange = "valuator",
@@ -19,10 +21,15 @@ namespace RankCalculator
             RoutingKey = "rank"
         };
 
-		public Worker(IConfiguration configuration, ILogger<Worker> logger, IConnectionMultiplexer redis)
+		public Worker(
+			IConfiguration configuration, 
+			ILogger<Worker> logger, 
+			IConnectionMultiplexer redis,
+			IHubContext<RankHub> hubContext)
         {
             _logger = logger;
             _redis = redis;
+			_hubContext = hubContext;
 
 			var factory = new ConnectionFactory
 			{
@@ -106,7 +113,17 @@ namespace RankCalculator
                 Rank = rank
             };
 
-            await ProduceAsync(channel, rankEventProps, new CancellationToken()); //возможно ошибка из-за токена
+
+            TimeSpan interval = TimeSpan.FromSeconds(new Random().Next(3, 15));
+            Console.WriteLine($"Waiting {interval}");
+            await Task.Delay(interval);
+
+            if (RankHub._userConnections.TryGetValue(key, out var connectionId))
+            {
+                await _hubContext.Clients.Client(connectionId).SendAsync("RankReceived", rank);
+            }
+
+            await ProduceAsync(channel, rankEventProps, new CancellationToken());
 
 			await channel.BasicAckAsync(eventArgs.DeliveryTag, false);
 

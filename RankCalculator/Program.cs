@@ -8,12 +8,13 @@ namespace RankCalculator
         {
             var builder = Host.CreateApplicationBuilder(args);
 
-            var connectionString = builder.Configuration.GetValue<string>("ConnectionString");
-
+            //var connectionString = builder.Configuration.GetValue<string>("ConnectionString");
+            builder.Services.AddScoped<IShardManager, RedisShardManager>();
             builder.Services.AddHostedService<Worker>();
 
-            builder.Services.AddSingleton<IConnectionMultiplexer>(options =>
-                ConnectionMultiplexer.Connect(connectionString!));
+
+            //builder.Services.AddSingleton<IConnectionMultiplexer>(options =>
+            //    ConnectionMultiplexer.Connect(connectionString!));
 
             var host = builder.Build();
             host.Run();

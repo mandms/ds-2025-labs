@@ -1,6 +1,5 @@
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using StackExchange.Redis;
 using System.Text;
 using System.Text.Json;
 
@@ -9,7 +8,7 @@ namespace RankCalculator
     public class Worker : BackgroundService
     {
         private readonly ILogger<Worker> _logger;
-        private readonly IConnectionMultiplexer _redis;
+        private readonly IShardManager _shardManager;
 		private readonly IConnection _connection;
         private QueueParams queueParams = new()
         {
@@ -19,10 +18,10 @@ namespace RankCalculator
             RoutingKey = "rank"
         };
 
-		public Worker(IConfiguration configuration, ILogger<Worker> logger, IConnectionMultiplexer redis)
+		public Worker(IConfiguration configuration, ILogger<Worker> logger, IShardManager shardManager)
         {
             _logger = logger;
-            _redis = redis;
+            _shardManager = shardManager;
 
 			var factory = new ConnectionFactory
 			{
@@ -88,17 +87,13 @@ namespace RankCalculator
             _logger.LogInformation("Consuming message...");
 
             string key = Encoding.UTF8.GetString(eventArgs.Body.ToArray()).Trim('\"');
-            var db = _redis.GetDatabase();
+			_shardManager.SetShard(key);
 
-            string textKey = "TEXT-" + key;
-
-            string text = Convert.ToString(db.StringGet(textKey));
+            string text = Convert.ToString(_shardManager.GetText(key));
 
             var rank = CalculateRank(text!);
 
-            string rankKey = "RANK-" + key;
-
-            await db.StringSetAsync(rankKey, rank);
+            _shardManager.SetToRegion(key, rank, "RANK-");
 
             var rankEventProps = new RankEventProps
             {

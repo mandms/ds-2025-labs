@@ -1,28 +1,39 @@
 ﻿using Microsoft.AspNetCore.Mvc.RazorPages;
-using Valuator.Repositories;
 
 namespace Valuator.Pages;
 public class SummaryModel : PageModel
 {
     private readonly ILogger<SummaryModel> _logger;
-    private readonly IValuatorRepository _repository;
+    private readonly IShardManager _shardManager;
 
-    public SummaryModel(ILogger<SummaryModel> logger, IValuatorRepository valuatorRepository)
+    public SummaryModel(ILogger<SummaryModel> logger, IShardManager shardManager)
     {
         _logger = logger;
-        _repository = valuatorRepository;
+        _shardManager = shardManager;
     }
 
     public double Rank { get; set; }
-    public double Similarity { get; set; }
+    public bool Similarity { get; set; } = false;
     public bool Loading { get; set; } = false;
 
     public void OnGet(string id)
     {
         _logger.LogDebug(id);
-		var rank = _repository.GetValue($"RANK-{id}");
-        var similarity = (int)_repository.GetValue($"SIMILARITY-{id}");
-        Similarity = similarity;
+
+        _shardManager.SetShard(id);
+
+        var rank = _shardManager.GetRank(id);
+        var similarity = _shardManager.GetSimilarity(id);
+
+        Console.WriteLine("RANK:" + rank);
+        Console.WriteLine("SIM: " + similarity);
+
+        if (similarity != StackExchange.Redis.RedisValue.Null)
+        {
+            bool.TryParse(similarity.ToString(), out bool similarityResult);
+            Similarity = similarityResult;
+        }
+
         if (rank != StackExchange.Redis.RedisValue.Null)
         {
             Rank = Convert.ToDouble(rank);

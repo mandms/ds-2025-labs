@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Valuator.Repositories;
 using Valuator.Services;
 
 namespace Valuator.Pages;
@@ -8,38 +7,49 @@ namespace Valuator.Pages;
 public class IndexModel : PageModel
 {
     private readonly ILogger<IndexModel> _logger;
-    private readonly IValuatorRepository _repository;
+    private readonly IShardManager _shardManager;
     private readonly IRabbitMQService _service;
+    private static readonly Dictionary<string, string> CountryRegions = new Dictionary<string, string>
+    {
+            { "Russia", "RU" },
+            { "France", "EU" },
+            { "Germany", "EU" },
+            { "UAE", "ASIA" },
+            { "India", "ASIA" }
+    };
     public string Port { get; set; }
 
-    public IndexModel(ILogger<IndexModel> logger, IValuatorRepository valuatorRepository, IRabbitMQService rabbitMQService)
+    public IndexModel(ILogger<IndexModel> logger, IShardManager shardManager, IRabbitMQService rabbitMQService)
     {
         _logger = logger;
-        _repository = valuatorRepository;
+        _shardManager = shardManager;
         _service = rabbitMQService;
-    }
-
-    public void OnGet()
-    {
         Port = Environment.GetEnvironmentVariable("EXTERNAL_PORT") ?? "NO PORT";
     }
 
-    public IActionResult OnPost(string text, CancellationTokenSource cts)
+    public IActionResult OnPost(string text, string country, CancellationTokenSource cts)
     {
         _logger.LogDebug(text);
 
+        if (string.IsNullOrEmpty(text))
+        {
+            return Page();
+        }
 
         string id = Guid.NewGuid().ToString();
 
-        string similarityKey = "SIMILARITY-" + id;
-        bool similarity = _repository.IsDuplicateText(text);
+        string region = CountryRegions[country];
 
+        Console.WriteLine("REGION: " + region);
+
+        _shardManager.SetToMain(id, region);
+
+        _shardManager.SetShard(id);
+        bool similarity = _shardManager.IsDuplicateText(text);
         _service.SendSimilarityMessage(similarity, id, cts);
+		_shardManager.SetToRegion(id, similarity, "SIMILARITY-");
 
-		_repository.SetSimilarity(similarityKey, similarity);
-
-        string textKey = "TEXT-" + id;
-        _repository.SetText(textKey, text);
+        _shardManager.SetToRegion(id, text, "TEXT-");
 
         _service.SendTextMessage(id, cts);
         

@@ -12,7 +12,7 @@ services:
       - ASPNETCORE_URLS=http://0.0.0.0:5001
       - EXTERNAL_PORT=5001
     depends_on:
-      - redis
+      - redis_asia
       - rabbitmq
     networks:
       - app-network
@@ -46,7 +46,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      redis:
+      redis_asia:
         condition: service_healthy
       app1:
         condition: service_started
@@ -94,9 +94,9 @@ services:
       - app-network
 
   # Redis
-  redis:
+  redis_main:
     image: redis:latest
-    container_name: redis
+    container_name: redis_main
     ports:
       - "6379:6379"
     networks:
@@ -106,6 +106,51 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  redis_ru:
+    image: redis:latest
+    container_name: redis_ru
+    ports:
+      - "6380:6379"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis_main
+
+  redis_eu:
+    image: redis:latest
+    container_name: redis_eu
+    ports:
+      - "6381:6379"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis_ru
+
+  redis_asia:
+    image: redis:latest
+    container_name: redis_asia
+    ports:
+      - "6382:6379"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis_eu
 
   rabbitmq:
     image: rabbitmq:3-management

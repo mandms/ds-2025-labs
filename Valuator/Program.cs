@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using StackExchange.Redis;
-using Valuator.Repositories;
 using Valuator.Services;
 
 namespace Valuator;
@@ -20,9 +19,10 @@ public class Program
 
         var redis = ConnectionMultiplexer.Connect(connectionString!);
 
-        builder.Services.AddScoped<IValuatorRepository, ValuatorRepository>();
+        builder.Services.AddScoped<IShardManager, RedisShardManager>();
 
         builder.Services.AddSingleton<IRabbitMQService, RabbitMQService>();
+
 
         builder.Services.AddDataProtection()
             .PersistKeysToStackExchangeRedis(redis, "DataProtection-Keys")

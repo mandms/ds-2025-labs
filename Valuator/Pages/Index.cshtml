@@ -9,6 +9,24 @@
         <div class="col-2">Текст для оценки: @Model.Port</div>
         <div class="col-10">
             <textarea name="text" rows="5" cols="50"></textarea>
+
+            <div class="form-group">
+                <label for="country">Выберите страну:</label>
+                <select class="form-control" id="country" name="country">
+                    <optgroup label="RU">
+                        <option value="Russia">Russia</option>
+                    </optgroup>
+                    <optgroup label="EU">
+                        <option value="France">France</option>
+                        <option value="Germany">Germany</option>
+                    </optgroup>
+                    <optgroup label="ASIA">
+                        <option value="UAE">UAE</option>
+                        <option value="India">India</option>
+                    </optgroup>
+                </select>
+            </div>
+
             <input type="submit" />
         </div>
     </form>

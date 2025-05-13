@@ -50,19 +50,19 @@ namespace RankCalculator
             _shard.StringSet(prefix + key, value.ToString());
         }
 
-        public RedisValue GetRank(string id) //переделать на hash: {rank, similarity, text}
+        public RedisValue GetRank(string id)
         {
             var value = _shard.StringGet("RANK-" + id);
             return value;
         }
 
-        public RedisValue GetSimilarity(string id) //переделать на hash: {rank, similarity, text}
+        public RedisValue GetSimilarity(string id)
         {
             var value = _shard.StringGet("SIMILARITY-" + id);
             return value;
         }
 
-        public RedisValue GetText(string id) //переделать на hash: {rank, similarity, text}
+        public RedisValue GetText(string id)
         {
             var value = _shard.StringGet("TEXT-" + id);
             return value;

@@ -25,6 +25,21 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-page="/About">Об авторе</a>
                         </li>
+                        @if (User.Identity?.IsAuthenticated == false)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-page="/Registration">Зарегистрироваться</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-page="/Auth">Авторизоваться</a>
+                            </li>
+                        } 
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-page="/Logout">Выйти</a>
+                            </li>
+                        }
                     </ul>
                 </div>
             </div>

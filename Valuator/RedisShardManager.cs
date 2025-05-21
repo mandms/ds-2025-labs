@@ -1,5 +1,7 @@
-﻿using StackExchange.Redis;
+﻿using Microsoft.AspNetCore.Http.HttpResults;
+using StackExchange.Redis;
 using System.Collections.Concurrent;
+using Valuator.Models;
 
 namespace Valuator
 {
@@ -10,6 +12,7 @@ namespace Valuator
         private readonly ConcurrentDictionary<string, ConnectionMultiplexer> _connectionCache = new();
         private ILogger<RedisShardManager> _logger;
         private IDatabase _shard;
+        private IDatabase _mainShard;
 
         public RedisShardManager(ILogger<RedisShardManager> logger, IConfiguration configuration)
         {
@@ -18,6 +21,7 @@ namespace Valuator
             _connections.Add("RU", configuration["RedisConnections:RU"] ?? "redis_ru:6379");
             _connections.Add("EU", configuration["RedisConnections:EU"] ?? "redis_eu:6379");
             _connections.Add("ASIA", configuration["RedisConnections:ASIA"] ?? "redis_asia:6379");
+            _mainShard = GetMainShard();
         }
 
         private IDatabase GetMainShard()
@@ -40,7 +44,7 @@ namespace Valuator
                 throw new ArgumentException("Key cannot be null or empty", nameof(key));
             }
 
-            var mainShard = GetMainShard();
+            var mainShard = _mainShard;
             var region = mainShard.StringGet(key);
 
             _logger.LogInformation("LOOKUP: {key}, {region}", key, region.ToString());
@@ -102,6 +106,11 @@ namespace Valuator
             return GetByKeyWithPrefix(id, "RANK-");
         }
 
+        public RedisValue GetAuthor(string id)
+        {
+            return GetByKeyWithPrefix(id, "AUTHOR-");
+        }
+
         public RedisValue GetSimilarity(string id)
         {
             return GetByKeyWithPrefix(id, "SIMILARITY-");
@@ -130,7 +139,10 @@ namespace Valuator
                 var conn = ConnectionMultiplexer.Connect(connectionString + ",abortConnect=false");
                 var db = conn.GetDatabase();
 
-                var server = conn.GetServer(connectionString);
+                var parts = connectionString.Split(',');
+                var hostAndPort = parts[0];
+
+                var server = conn.GetServer(hostAndPort);
                 var keys = server.Keys(pattern: "TEXT-*");
                 foreach (var key in keys)
                 {
@@ -144,7 +156,66 @@ namespace Valuator
 
             return false;
         }
-    
+
+        public async Task<bool> UserExists(string username)
+        {
+            var db = _mainShard;
+
+            var exists = await db.KeyExistsAsync($"USER-USERNAME-{username}");
+
+            if (!exists)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        public async Task<User?> GetUser(string username)
+        {
+            var db = _mainShard;
+            var userId = await db.StringGetAsync("USER-USERNAME-" + username);
+
+            var hash = await db.HashGetAllAsync("USER-" + userId);
+
+            if (hash.Length == 0) return null;
+            _logger.LogInformation("GET USER");
+            return new User
+            {
+                Id = userId.ToString(),
+                Username = hash.FirstOrDefault(x => x.Name == "username").Value.ToString(),
+                Password = hash.FirstOrDefault(x => x.Name == "password").Value.ToString()
+            };
+        }
+
+
+        public async Task AddUser(User user)
+        {
+            _logger.LogInformation("ADD USER 1 {id}, {username}, {pwd}", user.Id, user.Username, user.Password);
+            var entries = new HashEntry[]
+            {
+                new("username", user.Username),
+                new("password", user.Password)
+            };
+
+            var db = _mainShard;
+
+            var tran = db.CreateTransaction();
+            // Основной ключ с данными пользователя
+            await db.HashSetAsync($"USER-{user.Id}", entries);
+
+            // Индекс для поиска по username
+            await db.StringSetAsync($"USER-USERNAME-{user.Username}", user.Id);
+
+            bool committed = tran.Execute();
+
+            if (!committed)
+            {
+                throw new Exception("Error while adding user");
+            }
+
+            _logger.LogInformation("ADD USER 2 {id}, {username}, {pwd}", user.Id, user.Username, user.Password);
+        }
 
         public void Dispose()
         {

@@ -1,5 +1,20 @@
 ﻿version: '3.8'
 
+x-redis-config: &redis-config
+      image: redis:latest
+      environment:
+        - REDIS_PASSWORD=${REDIS_PASSWORD}
+        - REDIS_USER=${REDIS_USER}
+        - REDIS_USER_PASSWORD=${REDIS_USER_PASSWORD}
+      command: /bin/sh -c "redis-server --requirepass $$REDIS_PASSWORD"
+      networks:
+        - app-network
+      healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
 services:
   # ASP.NET Core приложение
   app1:
@@ -41,8 +56,6 @@ services:
       dockerfile: Dockerfile
     environment:
       - DOTNET_ENVIRONMENT=Production
-      - ConnectionStrings__Redis=redis:6379
-      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -59,8 +72,6 @@ services:
       dockerfile: Dockerfile
     environment:
       - DOTNET_ENVIRONMENT=Production
-      - ConnectionStrings__Redis=redis:6379
-      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
     depends_on:
       rank_calculator1:
         condition: service_started
@@ -73,7 +84,6 @@ services:
       dockerfile: Dockerfile
     environment:
       - DOTNET_ENVIRONMENT=Production
-      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
     depends_on:
       rank_calculator2:
         condition: service_started
@@ -86,7 +96,6 @@ services:
       dockerfile: Dockerfile
     environment:
       - DOTNET_ENVIRONMENT=Production
-      - ConnectionStrings__RabbitMQ=amqp://admin:123@rabbitmq:5672
     depends_on:
       events_logger1:
         condition: service_started
@@ -97,58 +106,34 @@ services:
   redis_main:
     image: redis:latest
     container_name: redis_main
+    <<: *redis-config
     ports:
       - "6379:6379"
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis_ru:
     image: redis:latest
     container_name: redis_ru
+    <<: *redis-config
     ports:
       - "6380:6379"
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     depends_on:
       - redis_main
 
   redis_eu:
     image: redis:latest
     container_name: redis_eu
+    <<: *redis-config
     ports:
       - "6381:6379"
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     depends_on:
       - redis_ru
 
   redis_asia:
     image: redis:latest
     container_name: redis_asia
+    <<: *redis-config
     ports:
       - "6382:6379"
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     depends_on:
       - redis_eu
 
@@ -157,8 +142,8 @@ services:
     container_name: rabbitmq
     hostname: rabbitmq
     environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=123
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672"  # AMQP
       - "15672:15672"  # Web UI

@@ -1,0 +1,35 @@
+﻿@page
+@model Valuator.Pages.AuthModel
+@{
+    ViewData["Title"] = "Авторизация";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-4">
+        <h1 class="text-center">@ViewData["Title"]</h1>
+        <form id="authForm" method="post">
+            <hr />
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <p class="text-danger">@Model.ErrorMessage</p>
+            }
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <div class="form-floating mb-3">
+                <input asp-for="Input.Username" class="form-control" autocomplete="username" aria-required="true" />
+                <label asp-for="Input.Username"></label>
+                <span asp-validation-for="Input.Username" class="text-danger"></span>
+            </div>
+            <div class="form-floating mb-3">
+                <input asp-for="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" />
+                <label asp-for="Input.Password"></label>
+                <span asp-validation-for="Input.Password" class="text-danger"></span>
+            </div>
+            <button id="authSubmit" type="submit" class="w-100 btn btn-lg btn-primary">Авторизоваться</button>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
+

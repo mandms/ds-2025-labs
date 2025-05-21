@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Security.Claims;
 using Valuator.Services;
 
 namespace Valuator.Pages;
@@ -31,6 +32,11 @@ public class IndexModel : PageModel
     {
         _logger.LogDebug(text);
 
+        if (!User.Identity!.IsAuthenticated)
+        {
+            return Page();
+        }
+
         if (string.IsNullOrEmpty(text))
         {
             return Page();
@@ -50,6 +56,10 @@ public class IndexModel : PageModel
 		_shardManager.SetToRegion(id, similarity, "SIMILARITY-");
 
         _shardManager.SetToRegion(id, text, "TEXT-");
+
+        string username = User.FindFirst(ClaimTypes.Name)!.Value;
+
+        _shardManager.SetToRegion(id, username, "AUTHOR-");
 
         _service.SendTextMessage(id, cts);
         

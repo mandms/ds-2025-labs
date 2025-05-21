@@ -5,6 +5,8 @@
 }
 
 <div class="text-center">
+    @if (User.Identity?.IsAuthenticated == true)
+    {
     <form method="post">
         <div class="col-2">Текст для оценки: @Model.Port</div>
         <div class="col-10">
@@ -29,5 +31,10 @@
 
             <input type="submit" />
         </div>
-    </form>
+        </form>
+    } 
+    else
+    {
+        <div class="col-2">Только авторизованные пользователи! <a asp-area="" asp-page="/Auth">Авторизоваться</a></div>
+    }
 </div>

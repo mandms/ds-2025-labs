@@ -2,12 +2,16 @@
 @model Valuator.Pages.SummaryModel
 @{
 }
-@if(Model.Loading == true)
+@if (!string.IsNullOrEmpty(Model.AccessDeniedMessage))
 {
-	<p>Оценка содержания не завершена</p>
+    <p class="text-danger">@Model.AccessDeniedMessage</p>
+}
+else if (Model.Loading == true)
+{
+    <p>Оценка содержания не завершена</p>
 }
 else
 {
-	<p>Оценка содержания: @Model.Rank</p>
+    <p>Оценка содержания: @Model.Rank</p>
+    <p>Плагиат: @Model.Similarity</p>
 }
-<p>Плагиат: @Model.Similarity</p>

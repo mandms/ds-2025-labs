@@ -1,4 +1,5 @@
 ﻿using StackExchange.Redis;
+using Valuator.Models;
 
 namespace Valuator
 {
@@ -11,5 +12,9 @@ namespace Valuator
         public RedisValue GetSimilarity(string id);
         public RedisValue GetText(string id);
         public bool IsDuplicateText(string text);
+        public RedisValue GetAuthor(string id);
+        public Task AddUser(User user);
+        public Task<bool> UserExists(string username);
+        public Task<User?> GetUser(string username);
     }
 }

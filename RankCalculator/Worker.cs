@@ -13,6 +13,7 @@ namespace RankCalculator
         private readonly IConnectionMultiplexer _redis;
 		private readonly IConnection _connection;
 		private readonly IHubContext<RankHub> _hubContext;
+		private readonly IRankService _rankService;
 		private QueueParams queueParams = new()
         {
             Queue = "calculate",
@@ -25,11 +26,13 @@ namespace RankCalculator
 			IConfiguration configuration, 
 			ILogger<Worker> logger, 
 			IConnectionMultiplexer redis,
-			IHubContext<RankHub> hubContext)
+			IHubContext<RankHub> hubContext,
+			IRankService rankService)
         {
             _logger = logger;
             _redis = redis;
 			_hubContext = hubContext;
+			_rankService = rankService;
 
 			var factory = new ConnectionFactory
 			{
@@ -101,7 +104,7 @@ namespace RankCalculator
 
             string text = Convert.ToString(db.StringGet(textKey));
 
-            var rank = CalculateRank(text!);
+            var rank = _rankService.CalculateRank(text!);
 
             string rankKey = "RANK-" + key;
 
@@ -114,7 +117,7 @@ namespace RankCalculator
             };
 
 
-            TimeSpan interval = TimeSpan.FromSeconds(new Random().Next(3, 15));
+            TimeSpan interval = TimeSpan.FromSeconds(3);
             Console.WriteLine($"Waiting {interval}");
             await Task.Delay(interval);
 
@@ -130,17 +133,6 @@ namespace RankCalculator
             _logger.LogInformation("key: {key} text: {text}", key, text);
 
             _logger.LogInformation("Message processed. Rank: {rank}", rank);
-        }
-
-        private static double CalculateRank(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-                return 0;
-
-            int totalChars = text.Length;
-            int nonAlphabeticCount = text.Count(c => !char.IsLetter(c));
-
-            return (double)nonAlphabeticCount / totalChars;
         }
 
 		private async Task DeclareTopologyAsync(IChannel channel, CancellationToken ct)

@@ -10,7 +10,7 @@
     document.cookie = `textId=${encodeURIComponent('@(Model.TextId)')}; path=/`;
     const hubConnection = new signalR.HubConnectionBuilder()
         .configureLogging(signalR.LogLevel.Debug)  // add this for diagnostic clues
-        .withUrl(`http://localhost:80/rankHub`, {
+        .withUrl(`http://nginx:80/rankHub`, {
             skipNegotiation: true,  // skipNegotiation as we specify WebSockets
             transport: signalR.HttpTransportType.WebSockets, // force WebSocket transport
             query: { 'id': '@(Model.TextId)' }

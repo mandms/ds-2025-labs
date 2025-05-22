@@ -1,0 +1,21 @@
+﻿1. Проверка текста с символами
+    input: Hello, world!
+    output: 0.231
+2. Текст без буквенных символов
+    input: 12345
+    output: 1.0
+3. Текст только из буквенных символов
+    input: abcDEF
+    output: 0.0
+4. Пустой текст
+    input: ""
+    output: 0.0
+5. Тест с переносом строки
+    input: "New\nLine"
+    output: 0.125
+6. Тест из пробелов
+    input: "    "
+    output: 1.0
+7. Тест emoji
+    input: "😊"
+    output: 1.0

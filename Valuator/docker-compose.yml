@@ -189,6 +189,21 @@ services:
       - "6901:5900"
     networks:
       - app-network
+  tests:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: sh -c "dotnet restore && dotnet build && dotnet test ./../RankTests/RankTests.csproj --logger:trx"
+    depends_on:
+      selenium-hub:
+        condition: service_healthy
+      app1:
+        condition: service_started
+      app2:
+        condition: service_started
+    networks:
+      - app-network
 
 # Сеть для связи между контейнерами
 networks:
